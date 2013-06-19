@@ -29,6 +29,7 @@ class DAG(object):
         self.miss_weight = 30
         self.indel = 20
         self.word_size = self.match_weight*4
+        self.list_of_contigs = 0
 
     def compute_all_long_contigs(self):
         self.compare ()
@@ -39,32 +40,33 @@ class DAG(object):
         for col in range(self.num_cols -1, 0, -1):
             for row in range(self.num_cols -1, 0, -1):
                 self.get_contig_if_missing(col, row, list_of_contigs)
-        self.remove_postfix_mismatches_from_contigs(list_of_contigs)
-        for x in list_of_contigs:
-            print x
-            if x:
-                print self.get(x[0]).weight
+        self.list_of_contigs = [contigs for contigs in list_of_contigs if not contigs is []]
 
-    def remove_postfix_mismatches_from_contigs(self, list_of_contigs):
+    def remove_postfix_mismatches_from_contigs(self, contigs):
+        if len(contigs) < 2:
+            return
         cur_node = 0
-        for contig in list_of_contigs:
-            if not contig:
+        prev_node = self.get(contigs[0]).weight
+        to_del = []
+        for count, contig in enumerate(contigs[1:]):
+            cur_node = self.get(contig).weight
+            if prev_node < cur_node:
+                to_del.append(count)
+            else:
                 break
-            cur_node = contig[0]
-            for position in range(contig):
-                if self.get(cur_node).weight > self.get(contig[position]).weight:
-                    break
-                else:
-                    del(contig)[position]
+            prev_node = cur_node
+        for count in to_del:
+            del contigs[0]
 
     def get_contig_if_missing(self, col, row, list_of_contigs):
         if self.dag_array[col][row].weight < self.word_size:
             return
-        exists = self.check_if_exists(self.dag_array[col][row], list_of_contigs)
-        if exists:
+        if self.check_if_exists(self.dag_array[col][row], list_of_contigs):
             return
         # it's new and big enough
         coord_path = self.get_path_from_coord((col, row))
+        if coord_path:
+          self.remove_postfix_mismatches_from_contigs(coord_path)
         for coord in coord_path:
             if self.check_if_exists(self.get(coord), list_of_contigs):
                 return
@@ -229,6 +231,23 @@ class DAG(object):
 
         print("Bottom right: {}".format(self.get_string((self.num_rows - 1, self.num_rows - 1))))
 
+    def print_contigs(self):
+        print "\nContigs found:"
+        for contig in self.list_of_contigs:
+            if contig:
+                #print contig
+                text = [self.list2[y] for x,y in contig]
+                text.reverse()
+                print text
+        
+    def print_score(self):
+        score = 0
+        for contig in self.list_of_contigs:
+            if contig:
+              score += self.get(contig[0]).weight
+        print "\nScore (total match score divided by string len): ",
+        print score / ((len(self.list1) +len(self.list2)) / 2)
+
     def save_csv(self, filename):
         with open(filename, 'wb') as csvfile:
             writer = csv.writer(csvfile, delimiter=',')
@@ -244,5 +263,6 @@ if __name__ == '__main__':
 
     dag.compute_all_long_contigs()
 
-    #dag.print_array()
-    #dag.save_csv("dag.csv")
+    dag.print_contigs()
+    dag.print_score()
+    dag.save_csv("dag.csv")
