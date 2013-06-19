@@ -4,10 +4,6 @@ import csv
 COL = 0
 ROW = 1
 
-match_weight = 10
-NON_MATCH_CHAR = '#'
-
-
 class Node(object):
     """docstring for Node"""
     def __init__(self, weight, parent, match):
@@ -17,7 +13,6 @@ class Node(object):
         self.parent = parent
 
         self.match = match
-
 
 class DAG(object):
     """docstring for DAG"""
@@ -29,11 +24,71 @@ class DAG(object):
         self.num_cols = len(self.list2)
 
         self.dag_array = None
+        self.NON_MATCH_CHAR = '#'
+        self.match_weight = 10
+        self.miss_weight = 30
+        self.indel = 20
+        self.word_size = self.match_weight*4
+
+    def compute_all_long_contigs(self):
+        self.compare ()
+        self.make_long_contigs_list()
+
+    def make_long_contigs_list(self):
+        list_of_contigs = [[]]
+        for col in range(self.num_cols -1, 0, -1):
+            for row in range(self.num_cols -1, 0, -1):
+                self.get_contig_if_missing(col, row, list_of_contigs)
+        self.remove_postfix_mismatches_from_contigs(list_of_contigs)
+        for x in list_of_contigs:
+            print x
+            if x:
+                print self.get(x[0]).weight
+
+    def remove_postfix_mismatches_from_contigs(self, list_of_contigs):
+        cur_node = 0
+        for contig in list_of_contigs:
+            if not contig:
+                break
+            cur_node = contig[0]
+            for position in range(contig):
+                if self.get(cur_node).weight > self.get(contig[position]).weight:
+                    break
+                else:
+                    del(contig)[position]
+
+    def get_contig_if_missing(self, col, row, list_of_contigs):
+        if self.dag_array[col][row].weight < self.word_size:
+            return
+        exists = self.check_if_exists(self.dag_array[col][row], list_of_contigs)
+        if exists:
+            return
+        # it's new and big enough
+        coord_path = self.get_path_from_coord((col, row))
+        for coord in coord_path:
+            if self.check_if_exists(self.get(coord), list_of_contigs):
+                return
+        list_of_contigs.append(coord_path)
+    
+    def check_if_exists(self, the_node, list_of_nodes):
+        for a_node_chain in list_of_nodes:
+            if the_node.parent in [self.get(a_node).parent for a_node in a_node_chain]:
+                return True
+        return False
+
+    def get_path_from_coord(self, node_coord):
+        node_path_list = [] 
+        cur_node = self.get(node_coord)
+        coord = node_coord[:]
+        while cur_node.weight > 0:
+            node_path_list.append(coord)
+            coord = cur_node.parent['node']
+            cur_node = self.get(coord)
+        return node_path_list
 
     def compare(self):
         # Create 2d array
         self.dag_array = [[None for col in range(self.num_cols)] for row in range(self.num_rows)]
-
         for col in range(0, self.num_cols):
             for row in range(0, self.num_rows):
                 self.dag_array[col][row] = self.get_weighted_node(col, row)
@@ -44,9 +99,9 @@ class DAG(object):
         # First item, no parent
         if row == col == 0:
             if match:
-                return Node(match_weight, None, match)
+                return Node(self.match_weight, None, match)
             else:
-                return Node(-match_weight, None, match)
+                return Node(0, None, match)
 
         # If we get here there must be a parent node
         parent_node = self.get_best_parent(col, row)
@@ -54,46 +109,44 @@ class DAG(object):
         score_change = self.get_score_change(col, row, parent_node, match)
         # score_change = 1
         # print("Col: {}, Row: {}. Letters: {}, {}\nMatch: {}, parent at ({}, {}), weight of {}".format(col, row, self.list1[col], self.list2[row], match, parent_node[COL], parent_node[ROW], self.get(parent_node).weight))
-
-        return Node(self.get(parent_node).weight + score_change, parent_node, match)
+        return Node(score_change, parent_node, match)
 
     def get_best_parent(self, col, row):
         left = self.get_left(col, row)
         up = self.get_up(col, row)
         diag = self.get_diag(col, row)
+        direction = ''
+        node = ''
 
         if diag and self.get(diag).weight >= self.get_max(left, up):
-            return diag
+            node = diag
+            direction = 'diag'
         elif left and not up:
-            return left
+            node = left
+            direction = 'left'
         elif up and not left:
-            return up
+            node = up
+            direction = 'up'
         else:
             if self.get(left).weight > self.get(up).weight:
-                return left
+                node = left
+                direction = 'left'
             else:
-                return up
+                node = up
+                direction = 'up'
+        return {'node':node, 'direction':direction}
 
     def get(self, coord):
         if coord is None or coord[0] < 0 or coord[1] < 0:
             return None
-
         return self.dag_array[coord[COL]][coord[ROW]]
 
     def get_max(self, first, second):
         return max(self.get(first).weight, self.get(second).weight)
 
-        # if first and second:
-        #     return max(self.get(first).weight, self.get(second).weight)
-        # elif first and not second:
-        #     return self.get(first).weight
-        # else:
-        #     return self.get(second).weight
-
     def get_left(self, col, row):
         if col == 0:
             return None
-
         return (col - 1, row)
         # return self.dag_array[col - 1][row]
 
@@ -106,23 +159,27 @@ class DAG(object):
     def get_diag(self, col, row):
         if row == 0 or col == 0:
             return None
-
         return (col - 1, row - 1)
         # return self.dag_array[col - 1][row - 1]
 
     def get_score_change(self, col, row, parent_node, match):
-
+        node_val = 0
         if match:
-            return match_weight
-        else:
-            num_misses = self.num_misses(parent_node) + 1
-            return round(-(match_weight / num_misses))
-
-            # if parent is diagnal
-            # if parent_node[COL] < col and parent_node[ROW] < row:
-            #     return match_weight
-            # else:
-            #     return 0
+            node_val += self.match_weight
+        else: 
+            node_val -= self.miss_weight
+        if parent_node['direction'] is 'left' or parent_node['direction'] is 'up':
+            node_val -= self.indel
+        #else:
+            #num_misses = self.num_misses(parent_node) + 1
+            #score = round(-(match_weight / num_misses))
+            #if score < 0:
+            #  return 0
+            #return score
+        node_val += self.get(parent_node['node']).weight
+        if node_val < 0:
+          return 0
+        return node_val
 
     def num_misses(self, coords):
         node = self.get(coords)
@@ -135,12 +192,13 @@ class DAG(object):
             return 0
 
     def get_string(self, coords):
+        return ''
         node = self.get(coords)
 
         if node.match:
             string_array = [self.list1[coords[ROW]]]
         else:
-            string_array = [NON_MATCH_CHAR]
+            string_array = [self.NON_MATCH_CHAR]
 
         string_array = self.get_previous_string(node.parent) + string_array
 
@@ -155,7 +213,7 @@ class DAG(object):
         if node.match:
             string_array = [self.list1[coords[ROW]]]
         else:
-            string_array = [NON_MATCH_CHAR]
+            string_array = [self.NON_MATCH_CHAR]
 
         previous_string_array = self.get_previous_string(node.parent)
 
@@ -172,7 +230,7 @@ class DAG(object):
         print("Bottom right: {}".format(self.get_string((self.num_rows - 1, self.num_rows - 1))))
 
     def save_csv(self, filename):
-        with open(filename, 'w', newline='') as csvfile:
+        with open(filename, 'wb') as csvfile:
             writer = csv.writer(csvfile, delimiter=',')
             writer.writerow([''] + self.list2)
             for index, row in enumerate(self.dag_array):
@@ -181,13 +239,10 @@ class DAG(object):
 if __name__ == '__main__':
     string1 = list("The mouse is a house, and I ate it")
     string2 = list("I ate my louse, and bought a mouse")
-    # string1 = string2
-    # string1 = list("Tree ")
-    # string2 = list("Three")
 
     dag = DAG(string1, string2)
 
-    dag.compare()
+    dag.compute_all_long_contigs()
 
-    dag.print_array()
-    dag.save_csv("dag.csv")
+    #dag.print_array()
+    #dag.save_csv("dag.csv")
