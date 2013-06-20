@@ -37,7 +37,7 @@ class DAG(object):
         self.match_weight = 10
         self.miss_weight = 30
         self.indel = 20
-        self.word_size = self.match_weight*4
+        self.word_size = self.match_weight*5
 
     def compute_all_long_contigs(self):
         self.compare ()
@@ -256,8 +256,8 @@ class DAG(object):
         for contig in self.list_of_contigs:
             if contig:
                 score += self.get(contig[0]).weight
-        print "\nScore (total match score divided by string len): ",
-        print score / ((len(self.list1) +len(self.list2)) / 2)
+        print "\nScore (total match score): ",# divided by string len): ",
+        print score #/ ((len(self.list1) +len(self.list2)) / 2)
 
     def save_csv(self, filename):
         with open(filename, 'wb') as csvfile:
@@ -292,7 +292,16 @@ class DAG(object):
     def get_possible_parent_contigs(self, sorted_contigs, this_contig):
         # skip any contigs which overlap on cur_strand (ex: 1 "the" matching 2 places)
         possible_parents = [a_contig for a_contig in sorted_contigs if a_contig.contig_path[0][-1] < this_contig.contig_path[-1][-1]]
+        #possible_parents = self.remove_overlapping_contigs(possible_parents, this_contig)
         return possible_parents
+
+   # def remove_overlapping_contigs(self, possible_contigs, matching_contig):
+   #     for pos_contig in possible_parents:
+   #     return
+
+   # def get_first_and_last(self, contig):
+   #     return
+    #def make_chain_of_contigs_from_class
 
     def print_contig_path(self, contig):
         print "\nBest contig path score: " + str(contig.weight)
@@ -308,10 +317,12 @@ class DAG(object):
         return
 
 if __name__ == '__main__':
-    string1 = list("The mouse is a house, and I ate it")
-    string2 = list("I ate my louse, and bought a mouse")
+    #string1 = list("The mouse is a house, and I ate it")
+    #string2 = list("I ate my louse, and bought a mouse")
+    reference = list("""aaaggggcttgatttatttcccatttttcttaaattcctcctttttagagagccaggccactctccttactgagatgcccaa""")
+    patient = list("""aagccaactgagatgcccaaagggggccactctccttgcttttcctcctttttagaggatttatttcccatttttcttaaaa""")
 
-    dag = DAG(string1, string2)
+    dag = DAG(reference, patient)
 
     dag.compute_all_long_contigs()
 
